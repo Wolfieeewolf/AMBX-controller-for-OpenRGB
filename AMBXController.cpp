@@ -68,17 +68,30 @@ AMBXController::AMBXController(const char* path)
             if(result != LIBUSB_SUCCESS)
             {
                 LOG_WARNING("Failed to open AMBX device: %s", libusb_error_name(result));
-                
-                if(result == LIBUSB_ERROR_ACCESS || result == LIBUSB_ERROR_BUSY)
-                {
-                    LOG_WARNING("AMBX device appears to be in use by another driver (possibly Jungo/WinDriver)");
-                    LOG_WARNING("Please use Device Manager to update the driver for this device to WinUSB");
-                }
                 continue;
             }
             
-            // Let libusb handle kernel driver detachment automatically
+            // Try to detach the kernel driver if attached
+            if(libusb_kernel_driver_active(dev_handle, 0))
+            {
+                libusb_detach_kernel_driver(dev_handle, 0);
+            }
+            
+            // Set auto-detach for Windows compatibility
             libusb_set_auto_detach_kernel_driver(dev_handle, 1);
+            
+            // Claim the interface - IMPORTANT: keep it claimed until destruction
+            result = libusb_claim_interface(dev_handle, 0);
+            
+            if(result != LIBUSB_SUCCESS)
+            {
+                LOG_ERROR("Failed to claim interface: %s", libusb_error_name(result));
+                libusb_close(dev_handle);
+                dev_handle = nullptr;
+                continue;
+            }
+            
+            interface_claimed = true;
             
             // Get string descriptor for serial number if available
             if(desc.iSerialNumber != 0)
@@ -92,7 +105,7 @@ AMBXController::AMBXController(const char* path)
                 }
             }
             
-            // Successfully opened the device (but haven't claimed interface yet)
+            // Successfully opened and claimed the device
             initialized = true;
             break;
         }
@@ -119,25 +132,19 @@ AMBXController::~AMBXController()
         {
             SetAllColors(ToRGBColor(0, 0, 0));
         }
-        catch(const std::exception& e)
-        {
-            LOG_WARNING("Exception while turning off lights: %s", e.what());
-        }
-        catch(...) 
-        {
-            LOG_WARNING("Unknown exception while turning off lights");
-        }
+        catch(...) {}
     }
     
     if(dev_handle != nullptr)
     {
-        // Release the interface and close the device
+        // Release the interface if claimed
         if(interface_claimed)
         {
             libusb_release_interface(dev_handle, 0);
             interface_claimed = false;
         }
         
+        // Close the device
         libusb_close(dev_handle);
         dev_handle = nullptr;
     }
@@ -164,74 +171,9 @@ bool AMBXController::IsInitialized()
     return initialized;
 }
 
-/*---------------------------------------------------------*\
-| Function: ClaimInterface                                   |
-|                                                           |
-| Description: Claims the USB interface for exclusive access |
-|                                                           |
-| Parameters: None                                           |
-|                                                           |
-| Returns: True if interface was claimed successfully,       |
-|          False otherwise                                   |
-\*---------------------------------------------------------*/
-bool AMBXController::ClaimInterface()
-{
-    if(!initialized || dev_handle == nullptr)
-    {
-        return false;
-    }
-    
-    // Interface is already claimed
-    if(interface_claimed)
-    {
-        return true;
-    }
-    
-    // Try to claim interface with multiple attempts
-    for(int attempt = 0; attempt < 3; attempt++)
-    {
-        int result = libusb_claim_interface(dev_handle, 0);
-        
-        if(result == LIBUSB_SUCCESS)
-        {
-            interface_claimed = true;
-            return true;
-        }
-        else if(result == LIBUSB_ERROR_BUSY) 
-        {
-            // Interface is likely claimed by another process or driver
-            LOG_WARNING("Interface is busy - attempt %d/3", attempt + 1);
-        }
-        
-        // Brief delay before retry
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
-    }
-    
-    LOG_ERROR("Failed to claim interface for AMBX device after multiple attempts");
-    LOG_ERROR("This may be due to the original Jungo/WinDriver drivers still being active");
-    LOG_ERROR("To fix this issue, please install the WinUSB driver for this device using Zadig");
-    return false;
-}
 
-/*---------------------------------------------------------*\
-| Function: ReleaseInterface                                |
-|                                                           |
-| Description: Releases the USB interface                    |
-|                                                           |
-| Parameters: None                                           |
-|                                                           |
-| Returns: None                                              |
-\*---------------------------------------------------------*/
-void AMBXController::ReleaseInterface()
-{
-    if(!initialized || dev_handle == nullptr || !interface_claimed)
-    {
-        return;
-    }
-    
-    libusb_release_interface(dev_handle, 0);
-    interface_claimed = false;
-}
+
+
 
 /*---------------------------------------------------------*\
 | Function: SendPacket                                       |
@@ -252,43 +194,19 @@ void AMBXController::SendPacket(unsigned char* packet, unsigned int size)
         return;
     }
     
-    // Try to claim the interface
-    bool claimed = ClaimInterface();
-    
-    if(!claimed)
+    if(!interface_claimed)
     {
-        LOG_ERROR("Failed to claim interface for AMBX before sending packet");
+        LOG_ERROR("USB interface not claimed for AMBX");
         return;
     }
     
     int actual_length = 0;
-    int result = LIBUSB_ERROR_OTHER; // Initialize with error
-    
-    // Try multiple times in case of transient errors
-    for(int attempt = 0; attempt < 3; attempt++)
-    {
-        result = libusb_interrupt_transfer(dev_handle, AMBX_ENDPOINT_OUT, packet, size, &actual_length, 100);
-        
-        if(result == LIBUSB_SUCCESS && actual_length == static_cast<int>(size))
-        {
-            break; // Success, exit the retry loop
-        }
-        
-        // Brief delay before retry with increasing backoff
-        std::this_thread::sleep_for(std::chrono::milliseconds(10 * (attempt + 1)));
-    }
+    int result = libusb_interrupt_transfer(dev_handle, AMBX_ENDPOINT_OUT, packet, size, &actual_length, 100);
     
     if(result != LIBUSB_SUCCESS)
     {
         LOG_ERROR("Failed to send interrupt transfer: %s", libusb_error_name(result));
     }
-    else if(actual_length != static_cast<int>(size))
-    {
-        LOG_ERROR("Failed to send complete packet: %d/%d bytes sent", actual_length, size);
-    }
-    
-    // Release the interface after use to allow other software to use the device
-    ReleaseInterface();
 }
 
 /*---------------------------------------------------------*\
@@ -307,6 +225,18 @@ void AMBXController::SendPacket(unsigned char* packet, unsigned int size)
 \*---------------------------------------------------------*/
 void AMBXController::SetSingleColor(unsigned int light, unsigned char red, unsigned char green, unsigned char blue)
 {
+    // Validate light ID
+    if(light != AMBX_LIGHT_LEFT && 
+       light != AMBX_LIGHT_RIGHT && 
+       light != AMBX_LIGHT_WALL_LEFT && 
+       light != AMBX_LIGHT_WALL_CENTER && 
+       light != AMBX_LIGHT_WALL_RIGHT && 
+       light != AMBX_LIGHT_ALL)
+    {
+        LOG_ERROR("Invalid AMBX light ID: 0x%02X", light);
+        return;
+    }
+    
     unsigned char color_buf[6];
     
     // Set up message packet
@@ -380,76 +310,12 @@ void AMBXController::SetLEDColor(unsigned int led, RGBColor color)
 \*---------------------------------------------------------*/
 void AMBXController::SetLEDColors(unsigned int* leds, RGBColor* colors, unsigned int count)
 {
-    // Use the more efficient multi-light protocol for better performance
-    // Process in batches of 5 lights (max that can fit in one packet)
-    const unsigned int BATCH_SIZE = 5;
-    
-    for(unsigned int i = 0; i < count; i += BATCH_SIZE)
-    {
-        unsigned int batch_count = ((i + BATCH_SIZE) <= count) ? BATCH_SIZE : (count - i);
-        SetMultipleColors(&leds[i], &colors[i], batch_count);
-    }
-}
-
-/*---------------------------------------------------------*\
-| Function: SetMultipleColors                               |
-|                                                           |
-| Description: Sets multiple lights to different colors     |
-|              in a single USB transaction                  |
-|                                                           |
-| Parameters:                                               |
-|   lights  - Array of light IDs                            |
-|   colors  - Array of RGB color values                     |
-|   count   - Number of lights to set                       |
-|                                                           |
-| Returns: None                                             |
-\*---------------------------------------------------------*/
-void AMBXController::SetMultipleColors(unsigned int* lights, RGBColor* colors, unsigned int count)
-{
-    if(count == 0 || count > 5)
-    {
-        return;
-    }
-    
-    // For a single light, use the simpler single light method
-    if(count == 1)
-    {
-        SetLEDColor(lights[0], colors[0]);
-        return;
-    }
-    
-    // Calculate the size of the packet: 1 byte header + (count * 5 bytes per light)
-    unsigned int packet_size = 1 + (count * 5);
-    
-    // Allocate memory for the packet dynamically
-    unsigned char* packet = new unsigned char[packet_size];
-    
-    // Different multi-command headers seen in traces
-    static const unsigned char multi_headers[] = { 0xA4, 0xC4, 0xE4, 0x04, 0x24, 0x44, 0x64, 0x84 };
-    static unsigned int header_index = 0;
-    
-    // Set packet header (rotating through the observed values)
-    packet[0] = multi_headers[header_index];
-    header_index = (header_index + 1) % (sizeof(multi_headers) / sizeof(multi_headers[0]));
-    
-    // Build the rest of the packet with each light's data
+    // Simple approach: just send individual commands for each light
     for(unsigned int i = 0; i < count; i++)
     {
-        unsigned int offset = 1 + (i * 5);
+        SetLEDColor(leds[i], colors[i]);
         
-        packet[offset + 0] = lights[i];               // Light ID
-        packet[offset + 1] = AMBX_SET_COLOR;          // Command (0x03)
-        packet[offset + 2] = RGBGetRValue(colors[i]); // Red
-        packet[offset + 3] = RGBGetGValue(colors[i]); // Green
-        packet[offset + 4] = RGBGetBValue(colors[i]); // Blue
+        // Small delay between commands
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
-    
-    // Send the packet
-    SendPacket(packet, packet_size);
-    
-    // Free the dynamically allocated memory
-    delete[] packet;
-    
-    // Brief delay to ensure the device processes the command
-    std::this_thread::sleep_for(std::chrono::milliseconds(5));
 }
