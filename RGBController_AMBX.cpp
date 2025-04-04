@@ -217,5 +217,3 @@ void RGBController_AMBX::DeviceUpdateMode()
     
     DeviceUpdateLEDs();
 }
-
-
