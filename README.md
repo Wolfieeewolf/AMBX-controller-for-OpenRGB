@@ -17,6 +17,13 @@ This driver allows OpenRGB to control these lights, providing a modern interface
 - Uses standard libusb drivers instead of proprietary Jungo drivers
 - Optimized protocol for efficient lighting updates
 
+## Recent Updates
+
+- Fixed USB interface management to maintain a claimed interface throughout the controller's lifetime
+- Simplified the communication approach to match other working implementations
+- Improved reliability of light control
+- Removed unnecessary debug logs and testing code
+
 ## Usage
 
 To use this driver with OpenRGB:
@@ -34,6 +41,7 @@ If OpenRGB fails to detect your amBX device:
 - Ensure the device is properly connected
 - Check that the WinUSB driver is correctly installed
 - Verify that no other software is currently using the device
+- Make sure all lights are properly connected to the amBX system
 
 ## License
 
