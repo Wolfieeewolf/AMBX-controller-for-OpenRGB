@@ -26,7 +26,7 @@
 |   1. Setting individual lights with their IDs             |
 |   2. Setting all lights simultaneously with a sequence    |
 |                                                           |
-|   Compatible with both original Philips and MadCatz amBX  |
+|   Compatible with Philips amBX Gaming lights               |
 \*---------------------------------------------------------*/
 
 #pragma once
@@ -44,8 +44,8 @@
 /*-----------------------------------------------------*\
 | AMBX VID/PID                                          |
 |                                                       |
-| The same VID/PID is used for both Philips and MadCatz |
-| versions of the amBX system                           |
+| The VID/PID for the amBX system                       |
+|                                                       |
 \*-----------------------------------------------------*/
 #define AMBX_VID                            0x0471
 #define AMBX_PID                            0x083F

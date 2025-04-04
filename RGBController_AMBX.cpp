@@ -42,6 +42,7 @@ RGBController_AMBX::RGBController_AMBX(AMBXController* controller_ptr)
         name = "Philips amBX " + std::to_string(device_idx + 1);
     }
     
+    
     vendor              = "Philips";
     type                = DEVICE_TYPE_ACCESSORY;
     description         = "Philips amBX Gaming Device";
@@ -153,7 +154,7 @@ void RGBController_AMBX::DeviceUpdateLEDs()
         led_colors[led_idx] = colors[led_idx];
     }
     
-    controller->SetLEDColors(led_values, led_colors, leds.size());
+    controller->SetLEDColors(led_values, led_colors, static_cast<unsigned int>(leds.size()));
 }
 
 void RGBController_AMBX::UpdateZoneLEDs(int zone)
@@ -169,7 +170,7 @@ void RGBController_AMBX::UpdateZoneLEDs(int zone)
     unsigned int start_idx = 0;
     unsigned int zone_size = 0;
     
-    for(unsigned int z_idx = 0; z_idx < zones.size(); z_idx++)
+    for(unsigned int z_idx = 0; z_idx < static_cast<unsigned int>(zones.size()); z_idx++)
     {
         if(z_idx == (unsigned int)zone)
         {
@@ -217,3 +218,5 @@ void RGBController_AMBX::DeviceUpdateMode()
     
     DeviceUpdateLEDs();
 }
+
+
