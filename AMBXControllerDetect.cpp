@@ -102,8 +102,6 @@ void DetectAMBXControllers()
                 else
                 {
                     LOG_WARNING("Found amBX device at %s but initialization failed", device_path);
-                    LOG_WARNING("This may be caused by the original Jungo/WinDriver drivers being installed");
-                    LOG_WARNING("Please use Zadig or Device Manager to replace the driver with WinUSB");
                     delete controller;
                 }
             }
