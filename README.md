@@ -13,7 +13,7 @@ This driver allows OpenRGB to control these lights, providing a modern interface
 ## Features
 
 - Supports all five lighting zones of the amBX system
-- Compatible with both Philips and MadCatz amBX hardware
+- Compatible with both Philips and maybe MadCatz amBX hardware. MadCatz still needs testing.
 - Uses standard libusb drivers instead of proprietary Jungo drivers
 - Optimized protocol for efficient lighting updates
 
