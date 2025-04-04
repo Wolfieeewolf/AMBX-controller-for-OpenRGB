@@ -108,7 +108,6 @@ public:
     void            SetAllColors(RGBColor color);
     void            SetLEDColor(unsigned int led, RGBColor color);
     void            SetLEDColors(unsigned int* leds, RGBColor* colors, unsigned int count);
-    void            SetMultipleColors(unsigned int* lights, RGBColor* colors, unsigned int count);
 
 private:
     libusb_context*          usb_context;
@@ -119,6 +118,4 @@ private:
     bool                     interface_claimed;
     
     void                    SendPacket(unsigned char* packet, unsigned int size);
-    bool                    ClaimInterface();
-    void                    ReleaseInterface();
 };
