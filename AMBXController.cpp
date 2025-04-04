@@ -293,6 +293,18 @@ void AMBXController::SetAllColors(RGBColor color)
 \*---------------------------------------------------------*/
 void AMBXController::SetLEDColor(unsigned int led, RGBColor color)
 {
+    if(!initialized)
+    {
+        LOG_ERROR("Cannot set LED color - AMBX device not initialized");
+        return;
+    }
+    
+    LOG_DEBUG("Setting LED 0x%02X to RGB: %d,%d,%d", 
+             led, 
+             RGBGetRValue(color), 
+             RGBGetGValue(color), 
+             RGBGetBValue(color));
+             
     SetSingleColor(led, RGBGetRValue(color), RGBGetGValue(color), RGBGetBValue(color));
 }
 
@@ -319,3 +331,5 @@ void AMBXController::SetLEDColors(unsigned int* leds, RGBColor* colors, unsigned
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
 }
+
+
