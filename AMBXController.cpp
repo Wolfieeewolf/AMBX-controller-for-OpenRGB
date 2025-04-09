@@ -115,7 +115,8 @@ AMBXController::AMBXController(const char* path)
     
     if(!initialized)
     {
-        LOG_ERROR("Failed to initialize AMBX device");
+        LOG_ERROR("Failed to initialize AMBX device - device not found or couldn't be accessed");
+        LOG_ERROR("Check USB connections and permissions");
         return;
     }
     
@@ -305,6 +306,18 @@ void AMBXController::SetLEDColor(unsigned int led, RGBColor color)
              RGBGetGValue(color), 
              RGBGetBValue(color));
              
+    // Validate LED ID before setting color
+    if(led != AMBX_LIGHT_LEFT && 
+       led != AMBX_LIGHT_RIGHT && 
+       led != AMBX_LIGHT_WALL_LEFT && 
+       led != AMBX_LIGHT_WALL_CENTER && 
+       led != AMBX_LIGHT_WALL_RIGHT && 
+       led != AMBX_LIGHT_ALL)
+    {
+        LOG_ERROR("Invalid AMBX LED ID: 0x%02X", led);
+        return;
+    }
+    
     SetSingleColor(led, RGBGetRValue(color), RGBGetGValue(color), RGBGetBValue(color));
 }
 

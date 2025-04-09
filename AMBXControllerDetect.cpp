@@ -127,8 +127,9 @@ void DetectAMBXControllers()
             
             if(descriptor.idVendor == AMBX_VID && descriptor.idProduct == AMBX_PID)
             {
-                LOG_WARNING("AMBX device found but couldn't be accessed");
-                LOG_WARNING("Please install WinUSB driver using Zadig tool");
+                LOG_WARNING("AMBX device found but couldn't be accessed - check permissions");
+                LOG_WARNING("On Windows, please install WinUSB driver using Zadig tool");
+                LOG_WARNING("On Linux, ensure udev rules are properly installed");
                 break;
             }
         }
